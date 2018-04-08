@@ -1,0 +1,133 @@
+<html>
+
+<body>
+	<input id="file" type="file" accept=".xls, .xlsx, .csv">
+	<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+	<script lang="javascript" src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.12.8/xlsx.full.min.js"></script>
+
+	<div id="sankey" style="width: 1100px; height: 600px;"></div>
+
+	<script type="text/javascript">
+		google.charts.load("current", { packages: ["sankey"] });
+
+		let columns = {
+			nodes: [
+				{ names: ['ID', 'Name'] },
+				{ names: ['Topic1', 'Topic2'], several: true },
+				{ names: ['Division'] }
+			],
+			value: 'Budget',
+			filter: {
+				name: 'Gamma',
+				values: ['IN', '?']
+			}
+		};
+		const rABS = true; // true: readAsBinaryString ; false: readAsArrayBuffer
+
+		function handleFile(e) {
+			var files = e.target.files, f = files[0];
+			var reader = new FileReader();
+			reader.onload = (e) => {
+				let file_data = e.target.result;
+				if (!rABS) file_data = new Uint8Array(file_data);
+				let workbook = XLSX.read(file_data, { type: rABS ? 'binary' : 'array' });
+				let excel = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+				let data = new google.visualization.DataTable();
+				data.addColumn('string', 'From');
+				data.addColumn('string', 'To');
+				data.addColumn('number', 'Weight');
+				for (const line of excel) {
+					if (columns.filter.values.includes(line[columns.filter.name])) {
+						let value = parseFloat(line[columns.value]);
+						if (value <= 0) {
+							value = 0.000001;
+						}
+						for (let i = 0; i < columns.nodes.length - 1; i++) {
+							console.log('COLUMN', i);
+							let from, to;
+							let empty = false;
+							if (columns.nodes[i]['several']) {
+								let n = 0;
+								for (const name of columns.nodes[i]['names']) {
+									if (typeof line[name] !== 'undefined') {
+										n++;
+									}
+								}
+								if (n > 0) {
+									value /= n;
+									for (const name of columns.nodes[i]['names']) {
+										if (typeof line[name] !== 'undefined') {
+											from = getLabel(line, [name]);
+											console.log(from);
+											addRowTo(line, columns.nodes[i + 1], from, value);
+										}
+									}
+								} else {
+									empty = true;
+								}
+							} else {
+								from = getLabel(line, columns.nodes[i]['names']);
+								console.log(from);
+								addRowTo(line, columns.nodes[i + 1], from, value);
+							}
+						}
+					} else {
+						console.log('OUT', line);
+					}
+				}
+
+				function addRowTo(line, column, from, value) {
+					if (column['several']) {
+						let n = 0;
+						for (const name of column['names']) {
+							if (typeof line[name] !== 'undefined') {
+								n++;
+							}
+						}
+						if (n > 0) {
+							value /= n;
+							for (const name of column['names']) {
+								if (typeof line[name] !== 'undefined') {
+									to = getLabel(line, [name]);
+									console.log(to, value);
+									data.addRow([from, to, value]);
+								}
+							}
+						}
+					} else {
+						to = getLabel(line, column['names']);
+						console.log(to, value);
+						data.addRow([from, to, value]);
+					}
+				}
+
+				const options = {
+					width: 1100,
+					sankey: {
+						link: {
+							colorMode: 'source'
+						}
+					}
+				};
+
+				let chart = new google.visualization.Sankey(document.getElementById('sankey'));
+				chart.draw(data, options);
+			};
+			if (rABS) reader.readAsBinaryString(f); else reader.readAsArrayBuffer(f);
+		}
+		document.getElementById('file').addEventListener('change', handleFile, false);
+
+		function getLabel(line, columns, separator) {
+			let label = '';
+			for (let i = 0; i < columns.length - 1; i++) {
+				label += `${line[columns[i]]} ${separator || '|'} `;
+			}
+			label += line[columns[columns.length - 1]];
+			return label;
+		}
+
+	</script>
+</body>
+
+</html>
